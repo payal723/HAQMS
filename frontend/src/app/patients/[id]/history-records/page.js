@@ -6,9 +6,10 @@ import Navbar from '@/components/common/Navbar';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, FileText, Clock, AlertCircle, ClipboardList } from 'lucide-react';
+import { API_URL } from '@/config.js';
 
 export default function PatientHistoryRecords() {
-  const { user, token, API_BASE_URL } = useAuth();
+  const { user, token, API_URL} = useAuth();
   const router = useRouter();
   const params = useParams();
   const patientId = params.id;
@@ -31,7 +32,7 @@ export default function PatientHistoryRecords() {
     const fetchPatientHistory = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`${API_BASE_URL}/patients/${patientId}`, {
+        const res = await fetch(`${API_URL}/patients/${patientId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 

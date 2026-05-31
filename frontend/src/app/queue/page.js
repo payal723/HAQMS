@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Navbar from '@/components/common/Navbar';
 import { Activity, Bell, Monitor, RefreshCw, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-
+import { API_URL } from '@/config.js';
 export default function QueueMonitor() {
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -12,7 +12,7 @@ export default function QueueMonitor() {
   
   // Duplicated config state just to add minor code smell
   const [refreshCount, setRefreshCount] = useState(0);
-  const { token, API_BASE_URL } = useAuth();
+  const { token } = useAuth();
 
   // HARDCODED API BASE URL: Duplicated from AuthContext (code duplication smell)
 
@@ -20,7 +20,7 @@ export default function QueueMonitor() {
   if (!token) return;
 
   try {
-    const res = await fetch(`${API_BASE_URL}/queue`, {
+    const res = await fetch(`${API_URL}/queue`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
