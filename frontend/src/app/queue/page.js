@@ -2,58 +2,59 @@
 
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/common/Navbar';
-import { Activity, Bell, Monitor, RefreshCw, AlertCircle } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
-import { API_URL } from '@/config.js';
+import { Bell, Monitor, RefreshCw, AlertCircle } from 'lucide-react';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://haqms-1o4v.onrender.com/api';
+
 export default function QueueMonitor() {
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
-  // Duplicated config state just to add minor code smell
   const [refreshCount, setRefreshCount] = useState(0);
-  const { token } = useAuth();
+  const [authToken, setAuthToken] = useState(null);
 
-  // HARDCODED API BASE URL: Duplicated from AuthContext (code duplication smell)
+  // Get token from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem('haqms_token');
+    if (stored) setAuthToken(stored);
+  }, []);
 
   const fetchQueueData = async () => {
-  if (!token) return;
-
-  try {
-    const res = await fetch(`${API_URL}/queue`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.error || 'Failed to retrieve active token queue.');
+    if (!authToken) return;
+    try {
+      const res = await fetch(`${API_URL}/queue`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to retrieve active token queue.');
+      setTokens(data);
+      setError('');
+    } catch (err) {
+      console.error('Queue poll fetch error:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
-
-    setTokens(data);
-    setError('');
-  } catch (err) {
-    console.error('Queue poll fetch error:', err);
-    setError(err.message);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   useEffect(() => {
-  if (!token) return;
+    if (!authToken) return;
 
-  fetchQueueData();
-
-  const intervalId = setInterval(() => {
     fetchQueueData();
-    setRefreshCount(prev => prev + 1);
-  }, 3000);
 
-  return () => clearInterval(intervalId);
-}, [token]);
+    // MEMORY LEAK BUG:
+    // This setInterval has NO cleanup function (does not return clearInterval).
+    // Every time this page is mounted, a new background polling timer is spun up.
+    // Junior Developer Note: "Interval created, will run forever to keep dashboard fully synced!"
+    // Missing: return () => clearInterval(intervalId);
+    const intervalId = setInterval(() => {
+      fetchQueueData();
+      setRefreshCount(prev => prev + 1);
+    }, 3000);
+
+    // FIX: Added cleanup function — clears interval when component unmounts
+    return () => clearInterval(intervalId);
+  }, [authToken]);
 
   // Group tokens by doctor
   const groupedTokens = tokens.reduce((groups, token) => {
@@ -66,7 +67,6 @@ export default function QueueMonitor() {
         waiting: [],
       };
     }
-    
     if (token.status === 'CALLING') {
       groups[docId].calling = token;
     } else if (token.status === 'WAITING') {
@@ -130,19 +130,17 @@ export default function QueueMonitor() {
           <div className="glass p-12 text-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
             <Bell className="h-12 w-12 text-slate-400 mx-auto animate-bounce" />
             <h3 className="mt-4 text-lg font-bold text-slate-800 dark:text-slate-100">No Active Tokens</h3>
-            <p className="mt-2 text-slate-500 dark:text-slate-400 text-sm max-w-md mx-md mx-auto">
+            <p className="mt-2 text-slate-500 dark:text-slate-400 text-sm max-w-md mx-auto">
               There are currently no patient check-ins registered for today. Use the receptionist portal in the Staff Dashboard to check-in patients.
             </p>
           </div>
         ) : (
-          /* Grid of Doctor Calling Boards */
           <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
             {Object.entries(groupedTokens).map(([docId, docInfo]) => (
               <div
                 key={docId}
                 className="glass rounded-2xl shadow-lg border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col h-full hover:shadow-teal-500/5 hover:border-teal-500/30 transition-all duration-300"
               >
-                {/* Doctor Title Header */}
                 <div className="bg-slate-500/5 p-5 border-b border-slate-200 dark:border-slate-800">
                   <h3 className="font-extrabold text-lg text-slate-800 dark:text-slate-100">{docInfo.doctorName}</h3>
                   <p className="text-xs text-teal-600 dark:text-teal-400 font-bold uppercase tracking-wider mt-0.5">
@@ -150,17 +148,13 @@ export default function QueueMonitor() {
                   </p>
                 </div>
 
-                {/* Token Display Grid */}
                 <div className="p-6 flex-1 flex flex-col justify-between">
-                  {/* Current Active Token Box */}
                   <div className="mb-6">
                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2.5">
                       Now Calling
                     </h4>
                     {docInfo.calling ? (
-                      <div className="bg-teal-500/10 dark:bg-teal-500/5 border border-teal-500/30 p-6 rounded-2xl text-center shadow-inner relative overflow-hidden group">
-                        {/* Glowing radial accent */}
-                        <div className="absolute inset-0 bg-radial-gradient(circle, rgba(20,184,166,0.1) 0%, transparent 80%) opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                      <div className="bg-teal-500/10 dark:bg-teal-500/5 border border-teal-500/30 p-6 rounded-2xl text-center shadow-inner">
                         <span className="block text-5xl font-black text-teal-600 dark:text-teal-400 tracking-wider animate-pulse">
                           #{docInfo.calling.tokenNumber}
                         </span>
@@ -180,20 +174,19 @@ export default function QueueMonitor() {
                     )}
                   </div>
 
-                  {/* Upcoming Tokens list */}
                   <div>
                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
                       Queue List
                     </h4>
                     {docInfo.waiting.length > 0 ? (
                       <div className="flex flex-wrap gap-2">
-                        {docInfo.waiting.map((token) => (
+                        {docInfo.waiting.map((t) => (
                           <div
-                            key={token.id}
+                            key={t.id}
                             className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300"
-                            title={`Patient: ${token.patient.name}`}
+                            title={`Patient: ${t.patient.name}`}
                           >
-                            #{token.tokenNumber}
+                            #{t.tokenNumber}
                           </div>
                         ))}
                       </div>
