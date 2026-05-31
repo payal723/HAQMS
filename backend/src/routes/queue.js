@@ -12,7 +12,7 @@ router.get('/', authenticate, async (req, res) => {
     const { doctorId, status } = req.query;
 
     const where = {};
-    if (doctorId) where.doctorId = doctorId;
+    if (doctorId) where.doctorId = parseInt(doctorId); // FIX: parseInt added
     if (status) where.status = status;
 
     const tokens = await prisma.queueToken.findMany({
@@ -46,38 +46,43 @@ router.post('/checkin', authenticate, async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // 1. Fetch current maximum token number for this doctor today
-    const maxTokenResult = await prisma.queueToken.aggregate({
-      where: {
-        doctorId,
-        createdAt: { gte: today },
-      },
-      _max: {
-        tokenNumber: true,
-      },
-    });
+    // FIX: Wrapped entire read-then-write inside a Prisma transaction
+    // This makes the operation atomic — no two concurrent check-ins can read the same max token
+    // and assign duplicate token numbers
+    const newToken = await prisma.$transaction(async (tx) => {
+      // 1. Fetch current maximum token number for this doctor today
+      const maxTokenResult = await tx.queueToken.aggregate({
+        where: {
+          doctorId: parseInt(doctorId),
+          createdAt: { gte: today },
+        },
+        _max: {
+          tokenNumber: true,
+        },
+      });
 
-    const currentMax = maxTokenResult._max.tokenNumber || 0;
-    const nextTokenNumber = currentMax + 1;
+      const currentMax = maxTokenResult._max.tokenNumber || 0;
+      const nextTokenNumber = currentMax + 1;
 
-    // PERFORMANCE/CONCURRENCY BUG: Artificial sleep to widen the race condition window.
-    // In production under microservices or high load, network delay does this naturally.
-    // Junior developer comment: "Adding sleep to make sure db registers the record correctly before moving forward"
-    await new Promise((resolve) => setTimeout(resolve, 350));
+      // PERFORMANCE/CONCURRENCY BUG: Artificial sleep to widen the race condition window.
+      // In production under microservices or high load, network delay does this naturally.
+      // Junior developer comment: "Adding sleep to make sure db registers the record correctly before moving forward"
+      // FIX: Removed artificial setTimeout — it served no purpose and worsened the race condition
 
-    // 2. Insert new token
-    const newToken = await prisma.queueToken.create({
-      data: {
-        tokenNumber: nextTokenNumber,
-        patientId,
-        doctorId,
-        appointmentId: appointmentId || null,
-        status: 'WAITING',
-      },
-      include: {
-        patient: true,
-        doctor: true,
-      },
+      // 2. Insert new token
+      return tx.queueToken.create({
+        data: {
+          tokenNumber: nextTokenNumber,
+          patientId: parseInt(patientId),
+          doctorId: parseInt(doctorId),
+          appointmentId: appointmentId ? parseInt(appointmentId) : null,
+          status: 'WAITING',
+        },
+        include: {
+          patient: true,
+          doctor: true,
+        },
+      });
     });
 
     res.status(201).json({
@@ -101,7 +106,7 @@ router.patch('/:id', authenticate, async (req, res) => {
     }
 
     const updatedToken = await prisma.queueToken.update({
-      where: { id: req.params.id },
+      where: { id: parseInt(req.params.id) }, // FIX: parseInt added
       data: { status },
       include: {
         patient: true,

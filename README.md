@@ -12,7 +12,7 @@ Candidates are tasked with auditing the codebase to identify, debug, profile, se
 - **Database & ORM**: PostgreSQL + Prisma ORM
 - **Process Management**: Docker Compose (Optional local PostgreSQL helper)
 
----
+---       
 
 ## 🚀 Getting Started & Setup
 

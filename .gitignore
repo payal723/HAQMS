@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment variables - KABHI PUSH MAT KARNA
+.env
+**/.env
+.env.local
+.env.production
+
+# Database files - SQLite
+*.db
+*.db-journal
+dev.db
+
+# Prisma generated
+**/prisma/migrations/
+
+# Next.js
+.next/
+out/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db

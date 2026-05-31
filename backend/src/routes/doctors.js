@@ -13,31 +13,25 @@ router.get('/', authenticate, async (req, res) => {
   try {
     const { search, specialization } = req.query;
 
-    let query = 'SELECT * FROM "Doctor"';
-    const conditions = [];
-
-    if (search) {
-      // Direct string interpolation - VULNERABLE TO SQL INJECTION!
-      // Example exploit: search=House%' UNION SELECT id, email, password, name, role, '09:00', '17:00', 0, id FROM "User" --
-      conditions.push(`name ILIKE '%${search}%'`);
-    }
-
-    if (specialization && specialization !== 'All') {
-      conditions.push(`specialization = '${specialization}'`);
-    }
-
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
-
-    console.log(`[SQL-DEBUG] Executing Query: ${query}`);
-    const doctors = await prisma.$queryRawUnsafe(query);
+    // FIX: Replaced queryRawUnsafe + string interpolation with Prisma's type-safe where clause
+    // Previously vulnerable to: search=House%' UNION SELECT id, email, password FROM "User" --
+    const doctors = await prisma.doctor.findMany({
+      where: {
+        ...(search && {
+          name: { contains: search }, // SQLite is case-insensitive by default
+        }),
+        ...(specialization && specialization !== 'All' && {
+          specialization,
+        }),
+      },
+    });
 
     // Inconsistent API formatting (directly sending array)
     res.json(doctors);
   } catch (error) {
     // Leaks query syntax details to candidate/attacker
-    res.status(500).json({ error: 'Database execution failure', sqlMessage: error.message });
+    // FIX: Removed sqlMessage: error.message from response
+    res.status(500).json({ error: 'Database execution failure' });
   }
 });
 
@@ -49,23 +43,13 @@ router.get('/stats', authenticate, async (req, res) => {
     const start = Date.now();
 
     // Independent database calls are run sequentially with await, stalling the event loop
-    const totalDoctors = await prisma.doctor.count();
-    
-    const surgeonsCount = await prisma.doctor.count({
-      where: { department: 'Surgery' },
-    });
-
-    const averageFee = await prisma.doctor.aggregate({
-      _avg: {
-        consultationFee: true,
-      },
-    });
-
-    const highestExperience = await prisma.doctor.aggregate({
-      _max: {
-        experience: true,
-      },
-    });
+    // FIX: Replaced sequential awaits with Promise.all() to run all queries in parallel
+    const [totalDoctors, surgeonsCount, averageFee, highestExperience] = await Promise.all([
+      prisma.doctor.count(),
+      prisma.doctor.count({ where: { department: 'Surgery' } }),
+      prisma.doctor.aggregate({ _avg: { consultationFee: true } }),
+      prisma.doctor.aggregate({ _max: { experience: true } }),
+    ]);
 
     const durationMs = Date.now() - start;
 
@@ -91,7 +75,7 @@ router.get('/stats', authenticate, async (req, res) => {
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const doctor = await prisma.doctor.findUnique({
-      where: { id: req.params.id },
+      where: { id: parseInt(req.params.id) }, // FIX: parseInt added
     });
 
     if (!doctor) {

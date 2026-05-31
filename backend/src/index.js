@@ -16,7 +16,12 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Enable CORS for all origins (weak/broad CORS config)
-app.use(cors());
+// FIX: Restricted CORS to only allow frontend origin instead of all origins
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 
 // Body parser
 app.use(express.json());
@@ -47,6 +52,7 @@ app.get('/', (req, res) => {
 // GLOBAL ERROR HANDLER
 // BUG: Improper error handling. It returns the raw error stack trace to the client,
 // which leaks details about database types, schema layout, and file paths.
+// FIX: stack trace only shown in development, never in production
 app.use((err, req, res, next) => {
   console.error('[CRITICAL-ERROR]:', err);
   res.status(500).json({

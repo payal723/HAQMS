@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/common/Navbar';
 import { Activity, Bell, Monitor, RefreshCw, AlertCircle } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export default function QueueMonitor() {
   const [tokens, setTokens] = useState([]);
@@ -11,48 +12,48 @@ export default function QueueMonitor() {
   
   // Duplicated config state just to add minor code smell
   const [refreshCount, setRefreshCount] = useState(0);
+  const { token, API_BASE_URL } = useAuth();
 
   // HARDCODED API BASE URL: Duplicated from AuthContext (code duplication smell)
-  const API_BASE_URL = 'http://localhost:5000/api';
 
   const fetchQueueData = async () => {
-    try {
-      // Insecure: Fetches queue without checking credentials (it's a public dashboard, which is fine, 
-      // but it uses the hardcoded API domain)
-      const res = await fetch(`${API_BASE_URL}/queue`);
-      if (!res.ok) {
-        throw new Error('Failed to retrieve active token queue.');
-      }
-      const data = await res.json();
-      setTokens(data);
-      setError('');
-    } catch (err) {
-      console.error('Queue poll fetch error:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
+  if (!token) return;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/queue`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to retrieve active token queue.');
     }
-  };
+
+    setTokens(data);
+    setError('');
+  } catch (err) {
+    console.error('Queue poll fetch error:', err);
+    setError(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
-    // Initial fetch
+  if (!token) return;
+
+  fetchQueueData();
+
+  const intervalId = setInterval(() => {
     fetchQueueData();
+    setRefreshCount(prev => prev + 1);
+  }, 3000);
 
-    // MEMORY LEAK BUG:
-    // This setInterval has NO cleanup function (does not return clearInterval).
-    // Every time this page is mounted, a new background polling timer is spun up.
-    // If the candidate navigates between Dashboard and Queue multiple times,
-    // dozens of parallel intervals will poll the database, causing memory bloat,
-    // state update crashes on unmounted components, and heavy server load.
-    const intervalId = setInterval(() => {
-      console.log(`[POLL] Active Queue Poll #${refreshCount + 1} firing...`);
-      fetchQueueData();
-      setRefreshCount((prev) => prev + 1);
-    }, 3000);
-
-    // Junior Developer Note: "Interval created, will run forever to keep dashboard fully synced!"
-    // Missing: return () => clearInterval(intervalId);
-  }, []); // Note that refreshCount dependency is missing too, causing stale closure on log!
+  return () => clearInterval(intervalId);
+}, [token]);
 
   // Group tokens by doctor
   const groupedTokens = tokens.reduce((groups, token) => {
@@ -129,7 +130,7 @@ export default function QueueMonitor() {
           <div className="glass p-12 text-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
             <Bell className="h-12 w-12 text-slate-400 mx-auto animate-bounce" />
             <h3 className="mt-4 text-lg font-bold text-slate-800 dark:text-slate-100">No Active Tokens</h3>
-            <p className="mt-2 text-slate-500 dark:text-slate-400 text-sm max-w-md mx-auto">
+            <p className="mt-2 text-slate-500 dark:text-slate-400 text-sm max-w-md mx-md mx-auto">
               There are currently no patient check-ins registered for today. Use the receptionist portal in the Staff Dashboard to check-in patients.
             </p>
           </div>

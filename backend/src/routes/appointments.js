@@ -15,40 +15,39 @@ router.get('/', authenticate, async (req, res) => {
     const { doctorId, status } = req.query;
 
     const where = {};
-    if (doctorId) where.doctorId = doctorId;
+    if (doctorId) where.doctorId = parseInt(doctorId);
     if (status) where.status = status;
 
-    // Fetch core appointments
+    // FIX: Replaced N+1 loop with a single query using Prisma's include
+    // Previously: fetched appointments, then for each one did 2 extra DB queries (patient + doctor)
+    // Now: single query fetches everything at once
     const appointments = await prisma.appointment.findMany({
       where,
+      include: {
+        patient: {
+          select: {
+            id: true,
+            name: true,
+            phoneNumber: true,
+            age: true,
+            medicalHistory: true,
+          },
+        },
+        doctor: {
+          select: {
+            id: true,
+            name: true,
+            specialization: true,
+          },
+        },
+      },
       orderBy: { appointmentDate: 'asc' },
     });
 
-    const detailedAppointments = [];
-
-    // N+1 triggers here: For every single appointment, we perform two extra queries!
-    for (const app of appointments) {
-      console.log(`[N+1 DB QUERY] Fetching Patient (${app.patientId}) and Doctor (${app.doctorId}) for Appointment ${app.id}`);
-      
-      const patient = await prisma.patient.findUnique({
-        where: { id: app.patientId },
-      });
-
-      const doctor = await prisma.doctor.findUnique({
-        where: { id: app.doctorId },
-      });
-
-      detailedAppointments.push({
-        ...app,
-        patient: patient ? { id: patient.id, name: patient.name, phoneNumber: patient.phoneNumber, age: patient.age, medicalHistory: patient.medicalHistory } : null,
-        doctor: doctor ? { id: doctor.id, name: doctor.name, specialization: doctor.specialization } : null,
-      });
-    }
-
     res.json({
       success: true,
-      count: detailedAppointments.length,
-      appointments: detailedAppointments,
+      count: appointments.length,
+      appointments,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve appointments', details: error.message });
@@ -74,24 +73,31 @@ router.post('/', authenticate, async (req, res) => {
     // It only checks if the exact millisecond matches. If the candidate books for "2026-05-25 10:00:00"
     // and another for "2026-05-25 10:00:01", they are treated as unique!
     // Junior dev logic: "Same time bookings will be blocked."
+    // FIX: Check within a 30-minute window instead of exact millisecond match
+    const windowStart = new Date(appDate.getTime() - 30 * 60 * 1000);
+    const windowEnd = new Date(appDate.getTime() + 30 * 60 * 1000);
+
     const existingBooking = await prisma.appointment.findFirst({
       where: {
-        doctorId,
-        appointmentDate: appDate,
+        doctorId: parseInt(doctorId),
+        appointmentDate: {
+          gte: windowStart,
+          lte: windowEnd,
+        },
         status: { not: 'CANCELLED' },
       },
     });
 
     if (existingBooking) {
       return res.status(400).json({
-        error: 'Double booking blocked. Doctor already has an appointment at this exact millisecond.',
+        error: 'Double booking blocked. Doctor already has an appointment within 30 minutes of this time.',
       });
     }
 
     const appointment = await prisma.appointment.create({
       data: {
-        patientId,
-        doctorId,
+        patientId: parseInt(patientId),
+        doctorId: parseInt(doctorId),
         appointmentDate: appDate,
         reason: reason || '',
         status: 'PENDING',
@@ -118,7 +124,7 @@ router.patch('/:id', authenticate, async (req, res) => {
     }
 
     const updated = await prisma.appointment.update({
-      where: { id: req.params.id },
+      where: { id: parseInt(req.params.id) }, // FIX: parseInt added — id is Int in schema
       data: { status },
     });
 

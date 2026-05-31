@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import Navbar from '@/components/common/Navbar';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link'; // FIX: Added missing Link import (was causing crash on render)
 import { 
   Users, CalendarDays, Activity, Search, Sparkles, UserPlus, 
   Trash2, ClipboardList, TrendingUp, DollarSign, Award, Clock,
@@ -96,9 +97,14 @@ export default function Dashboard() {
   };
 
   // Trigger Patient List Fetch (Every keystroke trigger re-renders parent! - Performance bug)
+  // FIX: Added 500ms debounce — fetchPatients now only fires after user stops typing
+  // Previously: every single keystroke triggered a new API call and full re-render
   useEffect(() => {
     if (user.role === 'RECEPTIONIST' || user.role === 'ADMIN') {
-      fetchPatients(1);
+      const debounceTimer = setTimeout(() => {
+        fetchPatients(1);
+      }, 500);
+      return () => clearTimeout(debounceTimer);
     }
   }, [patientSearch, patientGender]);
 
@@ -893,8 +899,9 @@ export default function Dashboard() {
                       Assuming medicalHistory is always populated. Accesses a method on a nullable property
                       without optional chaining! If medicalHistory is null (which is the case for Batman, Clark Kent, etc.),
                       this code throws: "Cannot read properties of null (reading 'toUpperCase')" and crashes the app! */}
+                  {/* FIX: Added optional chaining (?.) and nullish coalescing (??) for null safety */}
                   <p className="text-slate-700 dark:text-slate-300 leading-5 text-sm font-semibold">
-                    {selectedPatientHistory.medicalHistory.toUpperCase()}
+                    {selectedPatientHistory.medicalHistory?.toUpperCase() ?? 'No clinical history recorded for this patient.'}
                   </p>
                 </div>
 
