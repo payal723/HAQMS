@@ -14,6 +14,7 @@ import { API_URL } from '@/config.js';
 
 export default function Dashboard() {
   const { user, token, API_URL, logout } = useAuth();
+  const API_BASE_URL = API_URL;
   const router = useRouter();
 
   // Navigation Guard
@@ -139,7 +140,7 @@ export default function Dashboard() {
     }
 
     try {
-      const res = await fetch(`${API_URL}/patients`, {
+      const res = await fetch(`${API_BASE_URL}/patients`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
