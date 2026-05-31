@@ -18,10 +18,21 @@ const PORT = process.env.PORT || 5000;
 // Enable CORS for all origins (weak/broad CORS config)
 // FIX: Restricted CORS to only allow frontend origin instead of all origins
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      'https://haqms-flax.vercel.app',
+      'http://localhost:3000'
+    ];
+    // !origin allows Postman/CURL requests
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
 }));
+
 
 // Body parser
 app.use(express.json());
