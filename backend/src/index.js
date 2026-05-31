@@ -20,9 +20,9 @@ const PORT = process.env.PORT || 5000;
 app.use(cors({
   origin: function (origin, callback) {
     const allowedOrigins = [
-      'https://haqms-flax.vercel.app',
-      'http://localhost:3000'
-    ];
+  'https://haqms-a1dnpkz5d-payaljaat55-4980s-projects.vercel.app', 
+  'http://localhost:3000'
+];
     // !origin allows Postman/CURL requests
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
