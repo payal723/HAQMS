@@ -17,22 +17,15 @@ const PORT = process.env.PORT || 5000;
 
 // Enable CORS for all origins (weak/broad CORS config)
 // FIX: Restricted CORS to only allow frontend origin instead of all origins
+
 app.use(cors({
-  origin: function (origin, callback) {
-    const allowedOrigins = [
-  'https://haqms-a1dnpkz5d-payaljaat55-4980s-projects.vercel.app', 
-  'http://localhost:3000'
-];
-    // !origin allows Postman/CURL requests
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: [
+    'https://haqms-3ncg.vercel.app',
+    'https://haqms-3ncg-git-main-payaljaat55-4980s-projects.vercel.app',
+    'http://localhost:3000'
+  ],
   credentials: true
 }));
-
 
 // Body parser
 app.use(express.json());
