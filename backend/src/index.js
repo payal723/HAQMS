@@ -19,14 +19,9 @@ const PORT = process.env.PORT || 5000;
 // FIX: Restricted CORS to only allow frontend origin instead of all origins
 
 app.use(cors({
-  origin: [
-    'https://haqms-3ncg.vercel.app',
-    'https://haqms-3ncg-git-main-payaljaat55-4980s-projects.vercel.app',
-    'http://localhost:3000'
-  ],
+  origin: true,
   credentials: true
 }));
-
 // Body parser
 app.use(express.json());
 
